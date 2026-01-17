@@ -1,5 +1,9 @@
 package name.skyclient.gui.hud;
 
+import name.skyclient.module.Module;
+import name.skyclient.module.ModuleManager;
+import name.skyclient.module.settings.BooleanSetting;
+import name.skyclient.module.settings.Setting;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Style;
@@ -8,7 +12,9 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Panel {
 
@@ -18,15 +24,16 @@ public class Panel {
     private final String title;
 
     private final List<Module> modules = new ArrayList<>();
+    private final Map<Module, Boolean> moduleOpen = new HashMap<>();
 
-    // expand/collapse
+    // expand/collapse whole panel
     private boolean expanded = true;
 
     // drag
     private boolean dragging = false;
     private int dragOffsetX, dragOffsetY;
 
-    // fonts (these IDs must match your font json filenames)
+    // fonts
     private static final StyleSpriteSource FONT_TITLE =
             new StyleSpriteSource.Font(Identifier.of("skyclient", "roboto_bold"));
     private static final StyleSpriteSource FONT_TEXT =
@@ -38,10 +45,14 @@ public class Panel {
         this.width = width;
         this.title = title;
 
-        // demo modules (you'll replace these later with real ones per category)
-        modules.add(new Module("ExampleModule1"));
-        modules.add(new Module("ExampleModule2"));
-        modules.add(new Module("ExampleModule3"));
+        // TEMP category logic: modules only in Misc for now
+        if (title.equalsIgnoreCase("Misc")) {
+            modules.addAll(ModuleManager.getModules());
+        }
+
+        for (Module m : modules) {
+            moduleOpen.put(m, false);
+        }
     }
 
     public void render(DrawContext context, int mouseX, int mouseY) {
@@ -53,16 +64,21 @@ public class Panel {
         int headerBg = 0x55000000;
         int accent = 0xFF00C8C8;
 
-        int disabledText = 0xFFBFBFBF;
+        // brighter text
+        int disabledText = 0xFFE6E6E6;         // brighter than before
         int enabledText = 0xFF00C8C8;
 
-        // row colors
-        int hoverBg = 0x3300C8C8; // faint cyan overlay
+        int settingLabelColor = 0xFFF0F0F0;    // near pure white
+        int offTextColor = 0xFFB0B0B0;         // readable OFF
 
-        // Determine panel height dynamically
-        int rowHeight = mc.textRenderer.fontHeight + 3;
-        int bodyHeight = expanded ? (modules.size() * rowHeight + 4) : 0;
-        int height = headerHeight + bodyHeight;
+        int hoverBg = 0x3300C8C8;
+
+        // row sizing + centering
+        int rowHeight = mc.textRenderer.fontHeight + 6; // taller rows = better centering
+        int fontH = mc.textRenderer.fontHeight;
+        int textYOffset = (rowHeight - fontH) / 2;
+
+        int height = getPanelHeight(mc, rowHeight);
 
         // shadow
         context.fill(x + 2, y + 2, x + width + 2, y + height + 2, shadow);
@@ -80,68 +96,181 @@ public class Panel {
         Text titleText = Text.literal(title).setStyle(Style.EMPTY.withFont(FONT_TITLE));
         context.drawText(mc.textRenderer, titleText, x + 6, y + 5, accent, false);
 
-        // expand indicator (tiny)
-        context.drawText(
-                mc.textRenderer,
-                expanded ? "-" : "+",
-                x + width - 10,
-                y + 5,
-                0xFFFFFFFF,
-                false
-        );
+        // expand indicator
+        context.drawText(mc.textRenderer, expanded ? "-" : "+", x + width - 10, y + 5, 0xFFFFFFFF, false);
 
         if (!expanded) return;
 
-        // modules list area
         int listTop = y + headerHeight + 2;
-        int textX = x + 6;
+        int currentY = listTop;
 
-        for (int i = 0; i < modules.size(); i++) {
-            Module m = modules.get(i);
-            int rowY = listTop + i * rowHeight;
+        for (Module m : modules) {
 
-            // hover highlight
-            if (isHoveringModule(mouseX, mouseY, i, rowHeight)) {
-                context.fill(x, rowY - 1, x + width, rowY + rowHeight - 1, hoverBg);
+            // module hover
+            if (isHoveringRect(mouseX, mouseY, x, currentY - 1, width, rowHeight)) {
+                context.fill(x + 2, currentY - 1, x + width, currentY + rowHeight - 1, hoverBg);
             }
 
+            // module name (centered vertically)
             Text moduleText = Text.literal(m.getName()).setStyle(Style.EMPTY.withFont(FONT_TEXT));
             context.drawText(
                     mc.textRenderer,
                     moduleText,
-                    textX,
-                    rowY,
+                    x + 6,
+                    currentY + textYOffset,
                     m.isEnabled() ? enabledText : disabledText,
                     false
             );
+
+            // arrow if module has settings (centered vertically)
+            if (!m.getSettings().isEmpty()) {
+                boolean open = moduleOpen.getOrDefault(m, false);
+                context.drawText(
+                        mc.textRenderer,
+                        open ? "v" : ">",
+                        x + width - 10,
+                        currentY + textYOffset,
+                        0xFFFFFFFF,
+                        false
+                );
+            }
+
+            currentY += rowHeight;
+
+            // settings
+            boolean open = moduleOpen.getOrDefault(m, false);
+            if (open) {
+                for (Setting s : m.getSettings()) {
+
+                    // settings hover
+                    if (isHoveringRect(mouseX, mouseY, x, currentY - 1, width, rowHeight)) {
+                        context.fill(x + 2, currentY - 1, x + width, currentY + rowHeight - 1, hoverBg);
+                    }
+
+                    // guide line
+                    context.fill(x + 5, currentY - 1, x + 6, currentY + rowHeight - 1, 0x5500C8C8);
+
+                    if (s instanceof BooleanSetting b) {
+
+                        // fixed ON/OFF column
+                        int rightPadding = 8;
+                        int slotWidth = 22;
+                        int stateColumnRight = x + width - rightPadding;
+                        int stateColumnLeft = stateColumnRight - slotWidth;
+
+                        // label trimmed so it can't enter ON/OFF column
+                        int labelX = x + 8;
+                        int labelMaxWidth = (stateColumnLeft - 6) - labelX;
+
+                        String labelStr = b.getName();
+                        if (labelMaxWidth > 0) {
+                            labelStr = mc.textRenderer.trimToWidth(labelStr, labelMaxWidth);
+                        }
+
+                        Text label = Text.literal(labelStr).setStyle(Style.EMPTY.withFont(FONT_TEXT));
+                        context.drawText(
+                                mc.textRenderer,
+                                label,
+                                labelX,
+                                currentY + textYOffset,
+                                settingLabelColor,
+                                false
+                        );
+
+                        // ON/OFF aligned to same X
+                        String state = b.get() ? "ON" : "OFF";
+                        int stateColor = b.get() ? enabledText : offTextColor;
+
+                        int stateX = stateColumnLeft;
+                        context.drawText(
+                                mc.textRenderer,
+                                Text.literal(state).setStyle(Style.EMPTY.withFont(FONT_TEXT)),
+                                stateX,
+                                currentY + textYOffset,
+                                stateColor,
+                                false
+                        );
+
+                    } else {
+                        // other setting types later
+                        Text label = Text.literal(s.getName()).setStyle(Style.EMPTY.withFont(FONT_TEXT));
+                        context.drawText(
+                                mc.textRenderer,
+                                label,
+                                x + 8,
+                                currentY + textYOffset,
+                                settingLabelColor,
+                                false
+                        );
+                    }
+
+                    currentY += rowHeight;
+                }
+            }
         }
     }
 
     // --- input handling ---
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+
+        // drag header
         if (button == 0 && isHoveringHeader(mouseX, mouseY)) {
-            // Start drag on left click header
             dragging = true;
             dragOffsetX = (int) mouseX - x;
             dragOffsetY = (int) mouseY - y;
             return true;
         }
 
-        // Right click header toggles expand/collapse (SalHack-ish)
+        // collapse panel
         if (button == 1 && isHoveringHeader(mouseX, mouseY)) {
             expanded = !expanded;
             return true;
         }
 
-        // Left click module toggles it
-        if (expanded && button == 0) {
-            MinecraftClient mc = MinecraftClient.getInstance();
-            int rowHeight = mc.textRenderer.fontHeight + 3;
-            int idx = getModuleIndexAt(mouseX, mouseY, rowHeight);
-            if (idx != -1) {
-                modules.get(idx).toggle();
-                return true;
+        if (!expanded) return false;
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        int rowHeight = mc.textRenderer.fontHeight + 6;
+
+        int listTop = y + headerHeight + 2;
+        int currentY = listTop;
+
+        for (Module m : modules) {
+
+            // clicked module row
+            if (isHoveringRect(mouseX, mouseY, x, currentY - 1, width, rowHeight)) {
+
+                // left click toggles module
+                if (button == 0) {
+                    m.toggle();
+                    return true;
+                }
+
+                // right click opens settings
+                if (button == 1 && !m.getSettings().isEmpty()) {
+                    moduleOpen.put(m, !moduleOpen.getOrDefault(m, false));
+                    return true;
+                }
+            }
+
+            currentY += rowHeight;
+
+            // clicked settings rows
+            boolean open = moduleOpen.getOrDefault(m, false);
+            if (open) {
+                for (Setting s : m.getSettings()) {
+
+                    if (isHoveringRect(mouseX, mouseY, x, currentY - 1, width, rowHeight)) {
+                        if (button == 0 && s instanceof BooleanSetting b) {
+                            b.toggle();
+                            return true;
+                        }
+                        return true;
+                    }
+
+                    currentY += rowHeight;
+                }
             }
         }
 
@@ -163,27 +292,30 @@ public class Panel {
 
     // --- helpers ---
 
+    private int getPanelHeight(MinecraftClient mc, int rowHeight) {
+        int height = headerHeight + 4;
+
+        if (!expanded) return headerHeight;
+
+        for (Module m : modules) {
+            height += rowHeight;
+
+            boolean open = moduleOpen.getOrDefault(m, false);
+            if (open) {
+                height += m.getSettings().size() * rowHeight;
+            }
+        }
+
+        return Math.max(height, headerHeight + 4);
+    }
+
     private boolean isHoveringHeader(double mouseX, double mouseY) {
         return mouseX >= x && mouseX <= x + width
                 && mouseY >= y && mouseY <= y + headerHeight;
     }
 
-    private boolean isHoveringModule(double mouseX, double mouseY, int index, int rowHeight) {
-        int listTop = y + headerHeight + 2;
-        int rowY = listTop + index * rowHeight;
-        return mouseX >= x && mouseX <= x + width
-                && mouseY >= rowY && mouseY <= rowY + rowHeight;
-    }
-
-    private int getModuleIndexAt(double mouseX, double mouseY, int rowHeight) {
-        if (mouseY < y + headerHeight) return -1;
-
-        int listTop = y + headerHeight + 2;
-        int idx = (int) ((mouseY - listTop) / rowHeight);
-
-        if (idx < 0 || idx >= modules.size()) return -1;
-        if (!isHoveringModule(mouseX, mouseY, idx, rowHeight)) return -1;
-
-        return idx;
+    private boolean isHoveringRect(double mouseX, double mouseY, int rx, int ry, int rw, int rh) {
+        return mouseX >= rx && mouseX <= rx + rw
+                && mouseY >= ry && mouseY <= ry + rh;
     }
 }

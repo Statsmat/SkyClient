@@ -25,7 +25,7 @@ public class HudScreen extends Screen {
         int startX = 8;
         int startY = 8;
 
-        int panelW = 75;
+        int panelW = 120;
         int gap = 3;
 
         for (int i = 0; i < categories.length; i++) {
