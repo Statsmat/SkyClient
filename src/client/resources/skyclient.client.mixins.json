@@ -1,9 +1,9 @@
 {
 	"required": true,
-	"package": "name.skyclient.mixin.client",
+	"package": "name.skyclient.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-      "name.skyclient.ExampleClientMixin"
+      "gui.ExampleClientMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
