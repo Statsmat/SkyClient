@@ -1,5 +1,6 @@
 package name.skyclient.input;
 
+import name.skyclient.gui.hud.HudScreen;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.option.KeyBinding;
@@ -29,7 +30,7 @@ public class KeyInputHandler {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openGuiKey.wasPressed()) {
                 if (client.player != null) {
-                    client.player.sendMessage(Text.literal("You pressed the SkyClient key!"), false);
+                    client.setScreen(new HudScreen());
                 }
             }
         });
