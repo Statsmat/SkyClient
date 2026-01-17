@@ -1,4 +1,4 @@
-package name.skyclient.mixin.client;
+package name.skyclient.mixin;
 
 import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;

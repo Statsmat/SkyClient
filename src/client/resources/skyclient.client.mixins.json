@@ -3,7 +3,7 @@
 	"package": "name.skyclient.mixin.client",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"ExampleClientMixin"
+      "name.skyclient.ExampleClientMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
